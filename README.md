@@ -1,7 +1,8 @@
 
-gdocs - javai.nio.filesystem.FileSystem implmenetation to save and read files to/from google docs/drive
-cli - simple test shell to test any file system provider
-sync - cli interface for a simple FileVisitor which backup files to/from a remote file system
+Projects: 
+* gdocs - javai.nio.filesystem.FileSystem implmenetation to save and read files to/from google docs/drive
+* cli - simple test shell to test any file system provider
+* sync - cli interface for a simple FileVisitor which backup files to/from a remote file system
 
 Current status: draft
 
@@ -20,13 +21,10 @@ Usage:
 
 or from java code:
 
-<blockquote>
-
+```java
 Path p = FileSystems.getFileSystem(new URI("gdocs://docs.google.com")).getPath("/archiv/auto/something.pdf");
 
 Path to = FileSystems.getDefault().getPath("/tmp").resolve(p.getRoot().relativize(p).toString());
 
 Files.createDirectories(to.getParent());
-
-</blockquote>
-
+````
