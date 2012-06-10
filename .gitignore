@@ -3,4 +3,6 @@ target
 .classpath
 .project
 *~
-
+metadata
+.idea
+*.iml

@@ -1,5 +1,26 @@
 package net.anzix.jfs.gdocs;
 
+import com.google.api.client.auth.oauth2.Credential;
+import com.google.api.client.googleapis.MethodOverride;
+import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeFlow;
+import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets;
+import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets.Details;
+import com.google.api.client.googleapis.auth.oauth2.GoogleTokenResponse;
+import com.google.api.client.http.*;
+import com.google.api.client.http.javanet.NetHttpTransport;
+import com.google.api.client.http.xml.atom.AtomContent;
+import com.google.api.client.http.xml.atom.AtomParser;
+import com.google.api.client.json.JsonFactory;
+import com.google.api.client.json.jackson.JacksonFactory;
+import com.google.api.client.xml.XmlNamespaceDictionary;
+import net.anzix.SeekableChannelAdapter;
+import net.anzix.jfs.common.BaseFileSystem;
+import net.anzix.jfs.common.CollectionDirectoryStream;
+import net.anzix.jfs.common.DefaultPath;
+import net.anzix.jfs.gdocs.model.Category;
+import net.anzix.jfs.gdocs.model.Entry;
+import net.anzix.jfs.gdocs.model.Feed;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -7,62 +28,15 @@ import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.channels.Channels;
 import java.nio.channels.SeekableByteChannel;
-import java.nio.file.AccessMode;
-import java.nio.file.DirectoryStream;
-import java.nio.file.FileStore;
-import java.nio.file.FileSystem;
-import java.nio.file.LinkOption;
-import java.nio.file.NoSuchFileException;
-import java.nio.file.OpenOption;
-import java.nio.file.Path;
-import java.nio.file.PathMatcher;
-import java.nio.file.WatchService;
+import java.nio.file.*;
+import java.nio.file.DirectoryStream.Filter;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileAttribute;
-import java.nio.file.attribute.UserPrincipalLookupService;
-import java.nio.file.spi.FileSystemProvider;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Scanner;
-import java.util.Set;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import javax.activation.MimetypesFileTypeMap;
-
-import net.anzix.SeekableChannelAdapter;
-import net.anzix.jfs.common.CollectionDirectoryStream;
-import net.anzix.jfs.common.DefaultPath;
-import net.anzix.jfs.gdocs.model.Category;
-import net.anzix.jfs.gdocs.model.Entry;
-import net.anzix.jfs.gdocs.model.Feed;
-
-import com.google.api.client.auth.oauth2.Credential;
-import com.google.api.client.googleapis.MethodOverride;
-import com.google.api.client.googleapis.auth.clientlogin.ClientLogin;
-import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeFlow;
-import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets;
-import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets.Details;
-import com.google.api.client.googleapis.auth.oauth2.GoogleTokenResponse;
-import com.google.api.client.http.ByteArrayContent;
-import com.google.api.client.http.GenericUrl;
-import com.google.api.client.http.HttpRequest;
-import com.google.api.client.http.HttpRequestFactory;
-import com.google.api.client.http.HttpRequestInitializer;
-import com.google.api.client.http.HttpResponse;
-import com.google.api.client.http.HttpTransport;
-import com.google.api.client.http.javanet.NetHttpTransport;
-import com.google.api.client.http.xml.atom.AtomContent;
-import com.google.api.client.http.xml.atom.AtomParser;
-import com.google.api.client.json.JsonFactory;
-import com.google.api.client.json.jackson.JacksonFactory;
-import com.google.api.client.xml.XmlNamespaceDictionary;
-
-public class GDocsFileSystem extends FileSystem {
+public class GDocsFileSystem extends BaseFileSystem {
 	/** Global instance of the JSON factory. */
 	private static final JsonFactory JSON_FACTORY = new JacksonFactory();
 
@@ -84,8 +58,6 @@ public class GDocsFileSystem extends FileSystem {
 	/** Global instance of the HTTP transport. */
 	private static final HttpTransport HTTP_TRANSPORT = new NetHttpTransport();
 
-	private GDocsFileSystemProvider provider;
-
 	private GDocsPath root;
 
 	private HttpRequestFactory requestFactory;
@@ -96,19 +68,23 @@ public class GDocsFileSystem extends FileSystem {
 	 * Unit test only;
 	 */
 	public GDocsFileSystem() {
-		extensionTypeMap.put("pdf", "application/pdf");
-		extensionTypeMap.put("txt", "text/plain");
-		extensionTypeMap.put("jpeg", "image/jpeg");
-		extensionTypeMap.put("jpg", "image/jpeg");
+		super(null);
+		init();
 
 	}
 
 	public GDocsFileSystem(GDocsFileSystemProvider provider, URI uri) {
-		this();
-		this.provider = provider;
+		super(provider);
 		requestFactory = HTTP_TRANSPORT.createRequestFactory(getOAuth2Auth());
-		
+		init();
 
+	}
+
+	public void init() {
+		extensionTypeMap.put("pdf", "application/pdf");
+		extensionTypeMap.put("txt", "text/plain");
+		extensionTypeMap.put("jpeg", "image/jpeg");
+		extensionTypeMap.put("jpg", "image/jpeg");
 	}
 
 	public HttpRequestInitializer getOAuth2Auth() {
@@ -144,13 +120,6 @@ public class GDocsFileSystem extends FileSystem {
 
 	}
 
-	
-
-	@Override
-	public FileSystemProvider provider() {
-		return provider;
-	}
-
 	@Override
 	public void close() throws IOException {
 
@@ -163,77 +132,7 @@ public class GDocsFileSystem extends FileSystem {
 
 	@Override
 	public boolean isReadOnly() {
-		return true;
-	}
-
-	@Override
-	public String getSeparator() {
-		return "/";
-	}
-
-	@Override
-	public Iterable<Path> getRootDirectories() {
-		List<Path> result = new ArrayList<Path>();
-		result.add(getRoot());
-		return result;
-	}
-
-	@Override
-	public Iterable<FileStore> getFileStores() {
-		return null;
-
-	}
-
-	@Override
-	public Set<String> supportedFileAttributeViews() {
-		return new HashSet<String>();
-	}
-
-	@Override
-	public Path getPath(String first, String... more) {
-		StringBuilder b = new StringBuilder();
-		b.append(first);
-		for (String e : more) {
-			if (e.charAt(0) != '/' && !b.toString().equals("/")) {
-				e = "/" + e;
-			}
-			if (e.charAt(e.length() - 1) == '/') {
-				e = e.substring(0, e.length() - 1);
-			}
-			b.append(e.trim());
-		}
-		return new DefaultPath(this, b.toString());
-	}
-
-	@Override
-	public PathMatcher getPathMatcher(String syntaxAndPattern) {
-		return null;
-
-	}
-
-	@Override
-	public UserPrincipalLookupService getUserPrincipalLookupService() {
-		return null;
-
-	}
-
-	@Override
-	public WatchService newWatchService() throws IOException {
-		return null; // To change body of implemented methods use File |
-						// Settings | File Templates.
-	}
-
-	public Path getRoot() {
-		DefaultPath p = new DefaultPath(this, "/");
-		return p;
-	}
-
-	public DirectoryStream<Path> createDirectoryStream(Path dir) {
-
-		if (getPathHierarch().get(dir) == null) {
-			return new CollectionDirectoryStream(new ArrayList<Path>());
-		}
-		return new CollectionDirectoryStream(pathHierarchy.get(dir));
+		return false;
 	}
 
 	protected void loadHierarchy() {
@@ -340,7 +239,8 @@ public class GDocsFileSystem extends FileSystem {
 		} else {
 			uploadUrl = new GenericUrl(getPathHierarch()
 					.getAttribute((DefaultPath) path.getParent()).getEntry()
-					.getLink(GDocs.CREATE_MEDIA).href+"?convert=false");
+					.getLink(GDocs.CREATE_MEDIA).href
+					+ "?convert=false");
 		}
 
 		String type = getType(path);
@@ -352,7 +252,8 @@ public class GDocsFileSystem extends FileSystem {
 
 		HttpRequest createMetadataRequest = interceptRequest(requestFactory
 				.buildPostRequest(uploadUrl, content));
-		//createMetadataRequest.getHeaders().put("X-Upload-Content-Type", type);
+		// createMetadataRequest.getHeaders().put("X-Upload-Content-Type",
+		// type);
 		createMetadataRequest.getHeaders().put("X-Upload-Content-Length",
 				byteArray.length);
 
@@ -449,6 +350,16 @@ public class GDocsFileSystem extends FileSystem {
 			throw new IOException("Error during creating new dir: "
 					+ dir.toString(), ex);
 		}
+
+	}
+
+	@Override
+	public DirectoryStream<Path> newDirectoryStream(Path dir,
+			Filter<? super Path> filter) throws IOException {
+		if (getPathHierarch().get(dir) == null) {
+			return new CollectionDirectoryStream(new ArrayList<Path>());
+		}
+		return new CollectionDirectoryStream(pathHierarchy.get(dir));
 
 	}
 }

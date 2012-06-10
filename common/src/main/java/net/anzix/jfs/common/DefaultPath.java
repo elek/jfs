@@ -78,7 +78,7 @@ public class DefaultPath implements Path {
 	}
 
 	@Override
-	public Path getParent() {
+	public DefaultPath getParent() {
 		return new DefaultPath(fileSystem, absolute, Arrays.copyOf(
 				pathSegments, pathSegments.length - 1));
 	}
