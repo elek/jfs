@@ -36,6 +36,7 @@ public class Sync {
 			parser.parseArgument(args);
 			s.start();
 		} catch (CmdLineException e) {
+            parser.printUsage(System.out);
 			e.printStackTrace();
 		}
 	}
